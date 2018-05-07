@@ -1,0 +1,10 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.mob.eclipsemodule'
+
+repositories {
+	jcenter()
+}
+
+dependencies {
+	compile 'com.android.support:support-v4:+'
+}
