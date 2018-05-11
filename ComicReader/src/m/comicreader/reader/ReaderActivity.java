@@ -5,9 +5,6 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.os.Bundle;
-import android.support.v4.view.PagerAdapter;
-import android.support.v4.view.ViewPager;
-import android.support.v4.view.ViewPager.OnPageChangeListener;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -20,6 +17,9 @@ import android.widget.RelativeLayout;
 import android.widget.RelativeLayout.LayoutParams;
 import android.widget.TextView;
 
+import com.mob.tools.gui.MobViewPager;
+import com.mob.tools.gui.ViewPagerAdapter;
+
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 
@@ -28,17 +28,21 @@ import m.comicreader.R;
 public class ReaderActivity extends Activity {
 	private MPSFile mps;
 	private ArrayList<SimpleEntry<String, String[]>> contents;
-	private ViewPager vpPages;
-	private TabView[] tabs;
+	private MobViewPager vpPages;
+	private ArrayList<TabView> tabs;
 	
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
+		final RelativeLayout rl = new RelativeLayout(this);
+		rl.setBackgroundColor(0xffffffff);
+		setContentView(rl);
+		
 		final String[] mpsPaths = getIntent().getStringArrayExtra("mps");
 		final String name = mpsPaths[0];
 		open(mpsPaths, new Runnable() {
 			public void run() {
 				SharedPreferences sp = getPreferences(MODE_PRIVATE);
-				showComic(sp, name);
+				showComic(rl, sp, name);
 				readHistory(sp, name);
 			}
 		});
@@ -66,12 +70,8 @@ public class ReaderActivity extends Activity {
 		}.start();
 	}
 	
-	private void showComic(final SharedPreferences sp, final String name) {
-		RelativeLayout rl = new RelativeLayout(this);
-		rl.setBackgroundColor(0xffffffff);
-		setContentView(rl);
-		
-		vpPages = new ViewPager(this);
+	private void showComic(RelativeLayout rl, final SharedPreferences sp, final String name) {
+		vpPages = new MobViewPager(this);
 		rl.addView(vpPages, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 		
 		final TextView tv1 = new TextView(this);
@@ -114,48 +114,22 @@ public class ReaderActivity extends Activity {
 			}
 		});
 		
-		tabs = new TabView[] {
-				new TabView(vpPages.getContext(), mps),
-				new TabView(vpPages.getContext(), mps),
-				new TabView(vpPages.getContext(), mps),
-				new TabView(vpPages.getContext(), mps),
-				new TabView(vpPages.getContext(), mps)
-		};
-		
-		vpPages.setAdapter(new PagerAdapter() {
+		tabs = new ArrayList<TabView>();
+		vpPages.setAdapter(new ViewPagerAdapter() {
 			public int getCount() {
 				return contents.size();
 			}
 			
-			public boolean isViewFromObject(View view, Object object) {
-				return view == object;
-			}
-			
-			public void destroyItem(ViewGroup container, int position, Object object) {
-				container.removeView(tabs[position % tabs.length]);
-			}
-			
-			public Object instantiateItem(ViewGroup container, int position) {
-				TabView tab = tabs[position % tabs.length];
-				container.addView(tab);
-				SimpleEntry<String, String[]> e = contents.get(position);
+			public View getView(int position, View convertView, ViewGroup parent) {
+				if (convertView == null) {
+					TabView tab = new TabView(parent.getContext(), mps);
+					tabs.add(tab);
+					convertView = tab;
+				}
+				TabView tab = (TabView) convertView;
+				final SimpleEntry<String, String[]> e = contents.get(position);
 				tab.setImages(e.getKey(), e.getValue());
-				return tab;
-			}
-		});
-		vpPages.addOnPageChangeListener(new OnPageChangeListener() {
-			public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
-			
-			}
-			
-			public void onPageSelected(final int position) {
-				sp.edit().putInt("page_" + name, position).apply();
-				
-				TabView tab = tabs[position % tabs.length];
-				SimpleEntry<String, String[]> e = contents.get(position);
-				tv1.setText(e.getKey() + " (" + (position + 1) + "/" + contents.size() + ")");
 				final int size = e.getValue().length;
-				tv2.setText(1 + "/" + size);
 				tab.setOnScrollListener(new OnScrollListener() {
 					public void onScrollStateChanged(AbsListView view, int scrollState) {
 					
@@ -165,17 +139,21 @@ public class ReaderActivity extends Activity {
 						tv2.setText((first + 1) + "/" + size);
 					}
 				});
+				return convertView;
 			}
 			
-			public void onPageScrollStateChanged(int state) {
-			
+			public void onScreenChange(int currentScreen, int lastScreen) {
+				sp.edit().putInt("page_" + name, currentScreen).apply();
+				SimpleEntry<String, String[]> e = contents.get(currentScreen);
+				tv1.setText(e.getKey() + " (" + (currentScreen + 1) + "/" + contents.size() + ")");
+				tv2.setText(1 + "/" + e.getValue().length);
 			}
 		});
 	}
 	
 	private void readHistory(SharedPreferences sp, String name) {
 		int page = sp.getInt("page_" + name, 0);
-		vpPages.setCurrentItem(page);
+		vpPages.scrollToScreen(page, true);
 	}
 	
 	protected void onDestroy() {
@@ -183,11 +161,10 @@ public class ReaderActivity extends Activity {
 		new Thread() {
 			public void run() {
 				try {
-					if (tabs != null) {
-						for (TabView tab : tabs) {
-							tab.close();
-						}
+					for (TabView tab : tabs) {
+						tab.close();
 					}
+					tabs.clear();
 					mps.close();
 				} catch (Throwable t) {
 					t.printStackTrace();

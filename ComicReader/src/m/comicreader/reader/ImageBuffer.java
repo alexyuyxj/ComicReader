@@ -82,7 +82,8 @@ public class ImageBuffer {
 		Image image = new Image();
 		image.file = file;
 		image.raf = raf;
-		image.buffer = raf.getChannel().map(MapMode.READ_ONLY, bb.position(), bb.remaining());
+		image.buffer = bb.duplicate();
+		image.buffer.position(bb.position());
 		image.width = width;
 		image.height = height;
 		image.config = config;
@@ -151,9 +152,10 @@ public class ImageBuffer {
 			}
 		}
 		
-		image.buffer.position(0);
+		int pos = image.buffer.position();
 		Bitmap bm = Bitmap.createBitmap(image.width, image.height, image.config);
 		bm.copyPixelsFromBuffer(image.buffer);
+		image.buffer.position(pos);
 		return bm;
 	}
 	
