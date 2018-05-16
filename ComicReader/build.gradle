@@ -1,2 +1,11 @@
 apply plugin: 'com.android.application'
 apply plugin: 'com.mob.eclipsemodule'
+apply plugin: 'com.mob.sdk'
+
+MobSDK {
+	autoConfig false
+}
+
+configurations.all {
+	exclude group: 'com.mob', module: 'MobCommons'
+}

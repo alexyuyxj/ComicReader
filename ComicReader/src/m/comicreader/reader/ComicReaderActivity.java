@@ -14,6 +14,11 @@ import android.widget.BaseAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import com.mob.tools.RxMob;
+import com.mob.tools.RxMob.QuickSubscribe;
+import com.mob.tools.RxMob.Subscriber;
+import com.mob.tools.RxMob.Thread;
+
 import java.io.File;
 import java.io.FileFilter;
 import java.util.ArrayList;
@@ -32,16 +37,15 @@ public class ComicReaderActivity extends Activity {
 		lv.setSelector(new ColorDrawable());
 		setContentView(lv);
 		
-		new Thread() {
-			public void run() {
-				final HashMap<String, ArrayList<File>> files = collectFiles("/sdcard/mps");
-				runOnUiThread(new Runnable() {
-					public void run() {
-						initUI(files, lv);
-					}
-				});
+		RxMob.create(new QuickSubscribe<HashMap<String, ArrayList<File>>>() {
+			protected void doNext(Subscriber<HashMap<String, ArrayList<File>>> subscriber) throws Throwable {
+				subscriber.onNext(collectFiles("/sdcard/mps"));
 			}
-		}.start();
+		}).subscribeOnNewThreadAndObserveOnUIThread(new Subscriber<HashMap<String, ArrayList<File>>>() {
+			public void onNext(HashMap<String, ArrayList<File>> files) {
+				initUI(files, lv);
+			}
+		});
 	}
 	
 	private HashMap<String, ArrayList<File>> collectFiles(String path) {
@@ -153,23 +157,28 @@ public class ComicReaderActivity extends Activity {
 	
 	protected void onDestroy() {
 		super.onDestroy();
-		new Thread() {
-			public void run() {
-				try {
-					File folder = new File("/sdcard/mps/cache");
-					if (folder.exists()) {
-						String[] names = folder.list();
-						if (names != null) {
-							for (String name : names) {
-								new File(folder, name).delete();
-							}
+		RxMob.create(new QuickSubscribe<Void>() {
+			protected void doNext(Subscriber<Void> subscriber) throws Throwable {
+				File folder = new File("/sdcard/mps/cache");
+				if (folder.exists()) {
+					String[] names = folder.list();
+					if (names != null) {
+						for (String name : names) {
+							new File(folder, name).delete();
 						}
 					}
-				} catch (Throwable t) {
-					t.printStackTrace();
 				}
+			}
+		}).subscribeOn(Thread.NEW_THREAD)
+		.observeOn(Thread.IMMEDIATE)
+		.subscribe(new Subscriber<Void>() {
+			public void onError(Throwable t) {
+				t.printStackTrace();
+			}
+			
+			public void onCompleted() {
 				System.exit(0);
 			}
-		}.start();
+		});
 	}
 }

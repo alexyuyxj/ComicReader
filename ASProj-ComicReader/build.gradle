@@ -2,14 +2,13 @@
 
 buildscript {
 	repositories {
-		maven {
-			url "http://mvn.mob.com/android"
-		}
+		jcenter()
 	}
 
     dependencies {
         classpath 'com.android.tools.build:gradle:3.+'
 		classpath 'com.mob.eclipsemodule:EclipseModule:+'
+		classpath 'com.mob.sdk:MobSDK:+'
     }
 }
 

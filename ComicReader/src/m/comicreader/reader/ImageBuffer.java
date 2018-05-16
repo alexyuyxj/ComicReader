@@ -176,11 +176,13 @@ public class ImageBuffer {
 	}
 	
 	public void clear(boolean delete) throws Throwable {
+		HashMap<String, Image> tmp;
 		synchronized(this) {
-			for (Image image : buffers.values()) {
-				closeImage(image, delete);
-			}
-			buffers.clear();
+			tmp = buffers;
+			buffers = new HashMap<String, Image>();
+		}
+		for (Image image : tmp.values()) {
+			closeImage(image, delete);
 		}
 	}
 	

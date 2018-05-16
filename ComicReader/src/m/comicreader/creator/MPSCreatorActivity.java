@@ -1,7 +1,6 @@
 package m.comicreader.creator;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.drawable.ColorDrawable;
@@ -17,6 +16,10 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.mob.tools.RxMob;
+import com.mob.tools.RxMob.QuickSubscribe;
+import com.mob.tools.RxMob.Subscriber;
+
 import org.json.JSONObject;
 
 import java.io.File;
@@ -26,7 +29,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 
 public class MPSCreatorActivity extends Activity {
-	private boolean relaod;
 	
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -37,18 +39,18 @@ public class MPSCreatorActivity extends Activity {
 		lv.setSelector(new ColorDrawable());
 		setContentView(lv);
 		
-		new Thread() {
-			public void run() {
+		RxMob.create(new QuickSubscribe<HashMap<String, ArrayList<Chapter>>>() {
+			protected void doNext(Subscriber<HashMap<String, ArrayList<Chapter>>> subscriber) throws Throwable {
 				SQLiteDatabase db = copyDatabase();
-				final HashMap<String, ArrayList<Chapter>> chapters = collectFiles(db);
+				HashMap<String, ArrayList<Chapter>> chapters = collectFiles(db);
 				db.close();
-				runOnUiThread(new Runnable() {
-					public void run() {
-						initUI(chapters, lv);
-					}
-				});
+				subscriber.onNext(chapters);
 			}
-		}.start();
+		}).subscribeOnNewThreadAndObserveOnUIThread(new Subscriber<HashMap<String, ArrayList<Chapter>>>() {
+			public void onNext(HashMap<String, ArrayList<Chapter>> chapters) {
+				initUI(chapters, lv);
+			}
+		});
 	}
 	
 	private SQLiteDatabase copyDatabase() {
@@ -179,8 +181,8 @@ public class MPSCreatorActivity extends Activity {
 	}
 	
 	private void zipToBuffer(final HashMap<String, ArrayList<Chapter>> chapters, final String name, final ListView lv) {
-		new Thread() {
-			public void run() {
+		RxMob.create(new QuickSubscribe<String>() {
+			protected void doNext(Subscriber<String> subscriber) throws Throwable {
 				File result = null;
 				Throwable err = null;
 				try {
@@ -191,30 +193,27 @@ public class MPSCreatorActivity extends Activity {
 				} catch (final Throwable t) {
 					err = t;
 				}
-				String tmp;
+				String msg;
 				if (result != null) {
 					chapters.remove(name);
-					tmp = "Finished";
+					msg = "Finished";
 				} else if (err != null) {
-					tmp = err.getMessage();
+					msg = err.getMessage();
 				} else {
-					tmp = "Failed";
+					msg = "Failed";
 				}
-				final String msg = tmp;
-				runOnUiThread(new Runnable() {
-					public void run() {
-						initUI(chapters, lv);
-						Toast.makeText(MPSCreatorActivity.this, msg, Toast.LENGTH_SHORT).show();
-					}
-				});
+				subscriber.onNext(msg);
 			}
-		}.start();
+		}).subscribeOnNewThreadAndObserveOnUIThread(new Subscriber<String>() {
+			public void onNext(String msg) {
+				initUI(chapters, lv);
+				Toast.makeText(MPSCreatorActivity.this, msg, Toast.LENGTH_SHORT).show();
+			}
+		});
 	}
 	
 	protected void onDestroy() {
 		super.onDestroy();
-		if (!relaod) {
-			System.exit(0);
-		}
+		System.exit(0);
 	}
 }

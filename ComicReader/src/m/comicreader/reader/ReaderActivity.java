@@ -17,6 +17,10 @@ import android.widget.RelativeLayout;
 import android.widget.RelativeLayout.LayoutParams;
 import android.widget.TextView;
 
+import com.mob.tools.RxMob;
+import com.mob.tools.RxMob.QuickSubscribe;
+import com.mob.tools.RxMob.Subscriber;
+import com.mob.tools.RxMob.Thread;
 import com.mob.tools.gui.MobViewPager;
 import com.mob.tools.gui.ViewPagerAdapter;
 
@@ -37,20 +41,9 @@ public class ReaderActivity extends Activity {
 		rl.setBackgroundColor(0xffffffff);
 		setContentView(rl);
 		
-		final String[] mpsPaths = getIntent().getStringArrayExtra("mps");
-		final String name = mpsPaths[0];
-		open(mpsPaths, new Runnable() {
-			public void run() {
-				SharedPreferences sp = getPreferences(MODE_PRIVATE);
-				showComic(rl, sp, name);
-				readHistory(sp, name);
-			}
-		});
-	}
-	
-	private void open(final String[] mpsPaths, final Runnable afterOpen) {
-		new Thread() {
-			public void run() {
+		RxMob.create(new QuickSubscribe<String>() {
+			protected void doNext(Subscriber<String> subscriber) throws Throwable {
+				String[] mpsPaths = getIntent().getStringArrayExtra("mps");
 				try {
 					mps = new MPSFile(mpsPaths, 1024 * 16);
 					mps.open();
@@ -65,9 +58,15 @@ public class ReaderActivity extends Activity {
 				} catch (Throwable t) {
 					t.printStackTrace();
 				}
-				runOnUiThread(afterOpen);
+				subscriber.onNext(mpsPaths[0]);
 			}
-		}.start();
+		}).subscribeOnNewThreadAndObserveOnUIThread(new Subscriber<String>() {
+			public void onNext(String name) {
+				SharedPreferences sp = getPreferences(MODE_PRIVATE);
+				showComic(rl, sp, name);
+				readHistory(sp, name);
+			}
+		});
 	}
 	
 	private void showComic(RelativeLayout rl, final SharedPreferences sp, final String name) {
@@ -158,19 +157,21 @@ public class ReaderActivity extends Activity {
 	
 	protected void onDestroy() {
 		super.onDestroy();
-		new Thread() {
-			public void run() {
-				try {
-					for (TabView tab : tabs) {
-						tab.close();
-					}
-					tabs.clear();
-					mps.close();
-				} catch (Throwable t) {
-					t.printStackTrace();
+		RxMob.create(new QuickSubscribe<Void>() {
+			protected void doNext(Subscriber<Void> subscriber) throws Throwable {
+				for (TabView tab : tabs) {
+					tab.close();
 				}
+				tabs.clear();
+				mps.close();
 			}
-		}.start();
+		}).subscribeOn(Thread.NEW_THREAD)
+		.observeOn(Thread.IMMEDIATE)
+		.subscribe(new Subscriber<Void>() {
+			public void onError(Throwable t) {
+				t.printStackTrace();
+			}
+		});
 	}
 	
 }

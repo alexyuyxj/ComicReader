@@ -14,6 +14,10 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.mob.tools.RxMob;
+import com.mob.tools.RxMob.QuickSubscribe;
+import com.mob.tools.RxMob.Subscriber;
+
 import java.io.File;
 import java.io.FileFilter;
 import java.util.ArrayList;
@@ -32,16 +36,15 @@ public class MPSReCreatorActivity extends Activity {
 		lv.setSelector(new ColorDrawable());
 		setContentView(lv);
 		
-		new Thread() {
-			public void run() {
-				final HashMap<String, ArrayList<File>> files = collectFiles("/sdcard/mps");
-				runOnUiThread(new Runnable() {
-					public void run() {
-						initUI(files, lv);
-					}
-				});
+		RxMob.create(new QuickSubscribe<HashMap<String, ArrayList<File>>>() {
+			protected void doNext(Subscriber<HashMap<String, ArrayList<File>>> subscriber) throws Throwable {
+				subscriber.onNext(collectFiles("/sdcard/mps"));
 			}
-		}.start();
+		}).subscribeOnNewThreadAndObserveOnUIThread(new Subscriber<HashMap<String, ArrayList<File>>>() {
+			public void onNext(HashMap<String, ArrayList<File>> files) {
+				initUI(files, lv);
+			}
+		});
 	}
 	
 	private HashMap<String, ArrayList<File>> collectFiles(String path) {
@@ -156,21 +159,19 @@ public class MPSReCreatorActivity extends Activity {
 		});
 	}
 	
-	private void recreateMPS(ArrayList<File> mpsFiles, final ListView lv, final OnItemClickListener listener) {
-		try {
-			new MPSReCreator().recreate(mpsFiles.toArray(new File[mpsFiles.size()]), 1024 * 16);
-		} catch (final Throwable t) {
-			t.printStackTrace();
-			runOnUiThread(new Runnable() {
-				public void run() {
-					lv.setOnItemClickListener(listener);
-					Toast.makeText(MPSReCreatorActivity.this, t.getMessage(), Toast.LENGTH_SHORT).show();
-				}
-			});
-			return;
-		}
-		runOnUiThread(new Runnable() {
-			public void run() {
+	private void recreateMPS(final ArrayList<File> mpsFiles, final ListView lv, final OnItemClickListener listener) {
+		RxMob.create(new QuickSubscribe<Void>() {
+			protected void doNext(Subscriber<Void> subscriber) throws Throwable {
+				new MPSReCreator().recreate(mpsFiles.toArray(new File[mpsFiles.size()]), 1024 * 16);
+			}
+		}).subscribeOnNewThreadAndObserveOnUIThread(new Subscriber<Void>() {
+			public void onError(Throwable t) {
+				t.printStackTrace();
+				lv.setOnItemClickListener(listener);
+				Toast.makeText(MPSReCreatorActivity.this, t.getMessage(), Toast.LENGTH_SHORT).show();
+			}
+			
+			public void onCompleted() {
 				lv.setOnItemClickListener(listener);
 				Toast.makeText(MPSReCreatorActivity.this, "Finished", Toast.LENGTH_SHORT).show();
 			}

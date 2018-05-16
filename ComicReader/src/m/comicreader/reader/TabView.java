@@ -6,7 +6,6 @@ import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapFactory.Options;
 import android.graphics.drawable.ColorDrawable;
-import android.os.Handler.Callback;
 import android.os.Message;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +13,10 @@ import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 import android.widget.ListView;
+
+import com.mob.tools.RxMob;
+import com.mob.tools.RxMob.QuickSubscribe;
+import com.mob.tools.RxMob.Subscriber;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -78,65 +81,57 @@ public class TabView extends ListView {
 		};
 	}
 	
-	public void setImages(String name, final String[] images) {
+	public void setImages(String name, String[] images) {
 		try {
-			this.prefix = name;
+			prefix = name;
 			buffer.clear(true);
 		} catch (Throwable t) {
 			t.printStackTrace();
 		}
 		((BaseAdapter) getAdapter()).notifyDataSetChanged();
-		
-		new Thread() {
-			public void run() {
-				try {
-					final ImageBuffer ib = buffer;
-					decode(images, new Callback() {
-						public boolean handleMessage(Message msg) {
-							if (ib.equals(buffer)) {
-								try {
-									ib.put(prefix + msg.arg1, (Bitmap) msg.obj);
-									((BaseAdapter) TabView.this.getAdapter()).notifyDataSetChanged();
-								} catch (Throwable t) {
-									t.printStackTrace();
-								}
-							}
-							return false;
-						}
-					});
-				} catch (Throwable t) {
-					t.printStackTrace();
-				}
-			}
-		}.start();
+		decode(images);
 	}
 	
-	private void decode(String[] images, final Callback cb) throws Throwable {
-		final int[] len = new int[1];
-		final byte[][] baosBuf = new byte[1][];
-		ByteArrayOutputStream baos = new ByteArrayOutputStream() {
-			public void flush() throws IOException {
-				len[0] = count;
-				baosBuf[0] = buf;
-			}
-		};
-		
-		for (int i = 0; i < images.length; i++) {
-			baos.reset();
-			mps.read(images[i], baos);
-			Options opt = new Options();
-			opt.inPreferredConfig = Config.RGB_565;
-			final Bitmap bm = BitmapFactory.decodeByteArray(baosBuf[0], 0, len[0], opt);
-			final int index = i;
-			post(new Runnable() {
-				public void run() {
+	private void decode(final String[] images) {
+		final String thisPrefix = prefix;
+		RxMob.create(new QuickSubscribe<Message>() {
+			protected void doNext(Subscriber<Message> subscriber) throws Throwable {
+				final int[] len = new int[1];
+				final byte[][] baosBuf = new byte[1][];
+				ByteArrayOutputStream baos = new ByteArrayOutputStream() {
+					public void flush() throws IOException {
+						len[0] = count;
+						baosBuf[0] = buf;
+					}
+				};
+				
+				for (int i = 0; i < images.length; i++) {
+					baos.reset();
+					mps.read(images[i], baos);
+					Options opt = new Options();
+					opt.inPreferredConfig = Config.RGB_565;
 					Message msg = new Message();
-					msg.arg1 = index;
-					msg.obj = bm;
-					cb.handleMessage(msg);
+					msg.arg1 = i;
+					msg.obj = BitmapFactory.decodeByteArray(baosBuf[0], 0, len[0], opt);
+					subscriber.onNext(msg);
 				}
-			});
-		}
+			}
+		}).subscribeOnNewThreadAndObserveOnUIThread(new Subscriber<Message>() {
+			public void onError(Throwable t) {
+				t.printStackTrace();
+			}
+			
+			public void onNext(Message msg) {
+				if (prefix.equals(thisPrefix)) {
+					try {
+						buffer.put(prefix + msg.arg1, (Bitmap) msg.obj);
+						((BaseAdapter) TabView.this.getAdapter()).notifyDataSetChanged();
+					} catch (Throwable t) {
+						t.printStackTrace();
+					}
+				}
+			}
+		});
 	}
 	
 	public void close() {
